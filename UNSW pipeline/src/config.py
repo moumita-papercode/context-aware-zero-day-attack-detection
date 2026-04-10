@@ -6,8 +6,8 @@ from typing import Any, Dict
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "files": {
-        "train": "unsw-nb15/UNSW_NB15_training-set.csv",
-        "test":  "unsw-nb15/UNSW_NB15_testing-set.csv",
+        "train": "UNSW_NB15_training-set.csv",
+        "test": "UNSW_NB15_testing-set.csv",
     },
     "max_rows_total": 250000,
     "random_state": 42,
@@ -26,6 +26,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "abd_n_components": 5,
     "abd_k": 2,
     "abd_epsilon": 1.6,
+    # Fine-tuned Qwen3 branch
+    "enable_qwenft": True,
+    "hf_repo_name": " ", # provide necessary hugging face repository name after fine tuning
+    "llm_val_max": 500,
+    "llm_test_max": 4000,
+    "qwen_batch_size": 64,
+    "prompt_feature_limit": 12,
+    "max_prompt_tokens": 384,
+    "max_new_tokens": 96,
+    "qwen_include_ground_truth_fields": False,
 }
 
 
