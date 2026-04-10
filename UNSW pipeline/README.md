@@ -18,9 +18,11 @@ unsw_zero_day_repo_updated/
     ├── feature_selection.py
     ├── traditional_detectors.py
     ├── neural_detectors.py
+    ├── qwen_ft_detector.py
     ├── fusion.py
     └── evaluation.py
 ```
+
 
 ## File mapping from the notebook
 
