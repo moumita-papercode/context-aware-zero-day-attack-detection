@@ -161,8 +161,8 @@ def main() -> None:
         qwen_proba = qwen.predict_proba(df_test_eval_raw, batch_size=config.get("qwen_batch_size", 64))
         track(f"QwenFT mean - Val: {qwen_proba_val.mean():.3f}, Test: {qwen_proba.mean():.3f}")
 
-        hybrid_qwen_val = hybrid_tds_override(tds_val_eval, qwen_proba_val, sbd_val_eval, abd_val_eval)
-        hybrid_qwen = hybrid_tds_override(tds_test_eval, qwen_proba, sbd_test_eval, abd_test_eval)
+        hybrid_qwen_val = advanced_hybrid_fusion(tds_val_eval, qwen_proba_val, sbd_val_eval, abd_val_eval)
+        hybrid_qwen = advanced_hybrid_fusion(tds_test_eval, qwen_proba, sbd_test_eval, abd_test_eval)
         track(f"Hybrid mean - Val: {hybrid_qwen_val.mean():.3f}, Test: {hybrid_qwen.mean():.3f}")
 
         thresholds["Hybrid3(TDS-Qwen3)"] = find_optimal_threshold(y_val_eval, hybrid_qwen_val, 0.30, 0.70, 81)
