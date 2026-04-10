@@ -11,10 +11,18 @@ from src.data import (
 )
 from src.evaluation import evaluate_model, find_optimal_threshold, results_to_dataframe
 from src.feature_selection import ZeroDayFocusedEO
-from src.fusion import advanced_hybrid_fusion
+from src.fusion import advanced_hybrid_fusion, hybrid_tds_override
 from src.neural_detectors import train_neural_detectors
+from src.qwen_ft_detector import QwenFTDetector
 from src.traditional_detectors import train_traditional_detectors
-from src.utils import setup_environment, track
+from src.utils import track, setup_environment
+
+
+def _subsample_indices(n: int, k: int | None, random_state: int) -> np.ndarray:
+    rng = np.random.RandomState(random_state)
+    if k is None or k >= n:
+        return np.arange(n)
+    return rng.choice(n, size=k, replace=False)
 
 
 def main() -> None:
@@ -77,55 +85,109 @@ def main() -> None:
 
     dnn, gpt2 = train_neural_detectors(X_train_sel, y_train, config)
 
+    dnn_proba_val = dnn.predict_proba(X_val_sel)
+    gpt2_proba_val = gpt2.predict_proba(X_val_sel)
     dnn_proba = dnn.predict_proba(X_test_sel)
     gpt2_proba = gpt2.predict_proba(X_test_sel)
 
-    dnn_proba_val = dnn.predict_proba(X_val_sel)
-    gpt2_proba_val = gpt2.predict_proba(X_val_sel)
-
     hybrid_dnn_val = advanced_hybrid_fusion(tds_proba_val, dnn_proba_val, sbd_proba_val, abd_proba_val)
-    hybrid_dnn = advanced_hybrid_fusion(tds_proba, dnn_proba, sbd_proba, abd_proba)
-
     hybrid_gpt2_val = advanced_hybrid_fusion(tds_proba_val, gpt2_proba_val, sbd_proba_val, abd_proba_val)
+    hybrid_dnn = advanced_hybrid_fusion(tds_proba, dnn_proba, sbd_proba, abd_proba)
     hybrid_gpt2 = advanced_hybrid_fusion(tds_proba, gpt2_proba, sbd_proba, abd_proba)
 
+    val_idx = _subsample_indices(len(X_val_sel), config.get("llm_val_max"), config["random_state"])
+    test_idx = _subsample_indices(len(X_test_sel), config.get("llm_test_max"), config["random_state"])
+
+    y_val_eval = y_val[val_idx]
+    y_test_eval = y_test[test_idx]
+
+    sbd_val_eval = sbd_proba_val[val_idx]
+    abd_val_eval = abd_proba_val[val_idx]
+    tds_val_eval = tds_proba_val[val_idx]
+    dnn_val_eval = dnn_proba_val[val_idx]
+    gpt2_val_eval = gpt2_proba_val[val_idx]
+    hybrid_dnn_val_eval = hybrid_dnn_val[val_idx]
+    hybrid_gpt2_val_eval = hybrid_gpt2_val[val_idx]
+
+    sbd_test_eval = sbd_proba[test_idx]
+    abd_test_eval = abd_proba[test_idx]
+    tds_test_eval = tds_proba[test_idx]
+    dnn_test_eval = dnn_proba[test_idx]
+    gpt2_test_eval = gpt2_proba[test_idx]
+    hybrid_dnn_test_eval = hybrid_dnn[test_idx]
+    hybrid_gpt2_test_eval = hybrid_gpt2[test_idx]
+
+    df_val_eval = df_val.iloc[val_idx].reset_index(drop=True)
+    df_test_eval = df_test.iloc[test_idx].reset_index(drop=True)
+    df_val_eval_raw = df_val_raw.iloc[val_idx].reset_index(drop=True)
+    df_test_eval_raw = df_test_raw.iloc[test_idx].reset_index(drop=True)
+    track(f"Eval subsets -> Val={len(val_idx)}, Test={len(test_idx)}")
+
     thresholds = {
-        "Hybrid1(TDS-DNN)": find_optimal_threshold(y_val, hybrid_dnn_val),
-        "Hybrid2(TDS-GPT-2)": find_optimal_threshold(y_val, hybrid_gpt2_val),
+        "Hybrid1(TDS-DNN)": find_optimal_threshold(y_val_eval, hybrid_dnn_val_eval),
+        "Hybrid2(TDS-GPT-2)": find_optimal_threshold(y_val_eval, hybrid_gpt2_val_eval),
     }
 
-    zero_day_mask = df_test["is_zero_day"].values.astype(bool)
+    zero_day_mask_eval = df_test_eval["is_zero_day"].values.astype(bool)
     results = []
-    results.append(evaluate_model(y_test, sbd_proba, "SBD", zero_day_mask))
-    results.append(evaluate_model(y_test, abd_proba, "ABD", zero_day_mask))
-    results.append(evaluate_model(y_test, tds_proba, "TDS(SBD+ABD)", zero_day_mask))
-    results.append(evaluate_model(y_test, dnn_proba, "DNN", zero_day_mask))
-    results.append(evaluate_model(y_test, gpt2_proba, "GPT-2", zero_day_mask))
+    results.append(evaluate_model(y_test_eval, sbd_test_eval, "SBD", zero_day_mask_eval))
+    results.append(evaluate_model(y_test_eval, abd_test_eval, "ABD", zero_day_mask_eval))
+    results.append(evaluate_model(y_test_eval, tds_test_eval, "TDS(SBD+ABD)", zero_day_mask_eval))
+    results.append(evaluate_model(y_test_eval, dnn_test_eval, "DNN", zero_day_mask_eval))
+    results.append(evaluate_model(y_test_eval, gpt2_test_eval, "GPT-2", zero_day_mask_eval))
     results.append(
         evaluate_model(
-            y_test,
-            hybrid_dnn,
+            y_test_eval,
+            hybrid_dnn_test_eval,
             "Hybrid1(TDS-DNN)",
-            zero_day_mask,
+            zero_day_mask_eval,
             threshold=thresholds["Hybrid1(TDS-DNN)"],
         )
     )
     results.append(
         evaluate_model(
-            y_test,
-            hybrid_gpt2,
+            y_test_eval,
+            hybrid_gpt2_test_eval,
             "Hybrid2(TDS-GPT-2)",
-            zero_day_mask,
+            zero_day_mask_eval,
             threshold=thresholds["Hybrid2(TDS-GPT-2)"],
         )
     )
 
+    if config.get("enable_qwenft", False):
+        track("Running QwenFT on val/test evaluation subsets...")
+        qwen = QwenFTDetector(config)
+        qwen_proba_val = qwen.predict_proba(df_val_eval_raw, batch_size=config.get("qwen_batch_size", 64))
+        qwen_proba = qwen.predict_proba(df_test_eval_raw, batch_size=config.get("qwen_batch_size", 64))
+        track(f"QwenFT mean - Val: {qwen_proba_val.mean():.3f}, Test: {qwen_proba.mean():.3f}")
+
+        hybrid_qwen_val = hybrid_tds_override(tds_val_eval, qwen_proba_val, sbd_val_eval, abd_val_eval)
+        hybrid_qwen = hybrid_tds_override(tds_test_eval, qwen_proba, sbd_test_eval, abd_test_eval)
+        track(f"Hybrid mean - Val: {hybrid_qwen_val.mean():.3f}, Test: {hybrid_qwen.mean():.3f}")
+
+        thresholds["Hybrid3(TDS-Qwen3)"] = find_optimal_threshold(y_val_eval, hybrid_qwen_val, 0.30, 0.70, 81)
+        results.append(evaluate_model(y_test_eval, qwen_proba, "Qwen3", zero_day_mask_eval, threshold=0.5))
+        results.append(
+            evaluate_model(
+                y_test_eval,
+                hybrid_qwen,
+                "Hybrid3(TDS-Qwen3)",
+                zero_day_mask_eval,
+                threshold=thresholds["Hybrid3(TDS-Qwen3)"],
+            )
+        )
+
     results_df = results_to_dataframe(results)
     print("\n" + "=" * 90)
-   
+    print("FINAL RESULTS (SBD, ABD, TDS, DNN, GPT-2, Qwen3, Hybrids)")
     print("=" * 90)
     cols = ["Model", "Accuracy", "Precision", "Recall", "F1_Score", "AUC_ROC", "ZeroDay_Recall"]
     print(results_df[cols].round(4).to_string(index=False))
+
+    if thresholds:
+        print("\nThresholds used:")
+        for name, value in thresholds.items():
+            print(f"- {name}: {value:.4f}")
 
 
 if __name__ == "__main__":
