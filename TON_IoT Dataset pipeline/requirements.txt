@@ -1,0 +1,11 @@
+numpy
+pandas
+matplotlib
+tqdm
+scikit-learn
+xgboost
+torch
+transformers
+accelerate
+peft
+bitsandbytes
