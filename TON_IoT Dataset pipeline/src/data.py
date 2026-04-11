@@ -221,8 +221,7 @@ def zero_day_train_val_test_split(df: pd.DataFrame, config: Dict) -> DataFrames:
         f"{df_test['is_zero_day'].sum()} zero-day)"
     )
 
-    assert df_train["is_zero_day"].sum() == 0, "Train set contains zero-day samples."
-    assert df_val["is_zero_day"].sum() == 0, "Validation set contains zero-day samples."
+    assert df_train["is_zero_day"].sum() == 0, "Train set contains no zero-day samples."
+    assert df_val["is_zero_day"].sum() == 0, "Validation set contains  no zero-day samples."
     assert df_test["is_zero_day"].sum() > 0, "Test set should contain zero-day samples."
-    track("Zero-day split verification passed!")
     return df_train, df_val, df_test
